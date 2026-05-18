@@ -16,6 +16,7 @@ from typing import Any
 
 from Bio import Entrez
 from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,7 @@ if os.environ.get("PUBMED_API_KEY"):
 TOPIC = os.environ.get("PUBMED_TOPIC", "cancer immunotherapy").strip('"').strip("'")
 MAX_ARTICLES = int(os.environ.get("PUBMED_MAX_ARTICLES", "200"))
 REQUIRE_ABSTRACT = os.environ.get("PUBMED_REQUIRE_ABSTRACT", "false").lower() in {"1", "true", "yes"}
+DB_URL = os.environ["DATABASE_URL"]
 
 
 # ---------------------------------------------------------------- extract --
@@ -121,6 +123,92 @@ def transform(raw: dict) -> dict | None:
         return None
 
 
+# ------------------------------------------------------------------ load --
+INS_JOURNAL = text("""
+    INSERT INTO journals (name) VALUES (:name)
+    ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+    RETURNING id
+""")
+
+INS_AUTHOR = text("""
+    INSERT INTO authors (full_name) VALUES (:name)
+    ON CONFLICT (full_name) DO UPDATE SET full_name = EXCLUDED.full_name
+    RETURNING id
+""")
+
+INS_MESH = text("""
+    INSERT INTO mesh_terms (term) VALUES (:term)
+    ON CONFLICT (term) DO UPDATE SET term = EXCLUDED.term
+    RETURNING id
+""")
+
+INS_ARTICLE = text("""
+    INSERT INTO articles (pmid, title, abstract, year, journal_id)
+    VALUES (:pmid, :title, :abstract, :year, :journal_id)
+    ON CONFLICT (pmid) DO NOTHING
+    RETURNING pmid
+""")
+
+INS_ART_AUTHOR = text("""
+    INSERT INTO article_authors (article_id, author_id, position)
+    VALUES (:article_id, :author_id, :position)
+    ON CONFLICT DO NOTHING
+""")
+
+INS_ART_MESH = text("""
+    INSERT INTO article_mesh (article_id, mesh_id)
+    VALUES (:article_id, :mesh_id)
+    ON CONFLICT DO NOTHING
+""")
+
+
+def load(rows: list[dict]) -> dict:
+    inserted = 0
+    skipped = 0
+    engine = create_engine(DB_URL)
+    with engine.begin() as conn:
+        for r in rows:
+            journal_id = None
+            if r["journal"]:
+                journal_id = conn.execute(INS_JOURNAL, {"name": r["journal"]}).scalar()
+
+            res = conn.execute(
+                INS_ARTICLE,
+                {
+                    "pmid": r["pmid"],
+                    "title": r["title"],
+                    "abstract": r["abstract"],
+                    "year": r["year"],
+                    "journal_id": journal_id,
+                },
+            ).fetchone()
+
+            if res is None:
+                skipped += 1
+                continue
+            inserted += 1
+
+            for pos, name in enumerate(r["authors"], start=1):
+                aid = conn.execute(INS_AUTHOR, {"name": name}).scalar()
+                conn.execute(
+                    INS_ART_AUTHOR,
+                    {"article_id": r["pmid"], "author_id": aid, "position": pos},
+                )
+
+            for term_str in r["mesh_terms"]:
+                mid = conn.execute(INS_MESH, {"term": term_str}).scalar()
+                conn.execute(INS_ART_MESH, {"article_id": r["pmid"], "mesh_id": mid})
+
+    with engine.connect() as conn:
+        totals = {
+            "articles": conn.execute(text("SELECT COUNT(*) FROM articles")).scalar(),
+            "journals": conn.execute(text("SELECT COUNT(*) FROM journals")).scalar(),
+            "authors": conn.execute(text("SELECT COUNT(*) FROM authors")).scalar(),
+            "mesh_terms": conn.execute(text("SELECT COUNT(*) FROM mesh_terms")).scalar(),
+        }
+    return {"inserted": inserted, "skipped": skipped, "totals": totals}
+
+
 # ------------------------------------------------------------------ main --
 def main() -> int:
     print(f"[CONFIG] topic={TOPIC!r}  max={MAX_ARTICLES}")
@@ -132,6 +220,13 @@ def main() -> int:
     print(f"[TRANSFORM] cleaning {len(raw)} records")
     rows = [r for r in (transform(x) for x in raw) if r]
     print(f"[TRANSFORM] kept {len(rows)} valid rows  (dropped {len(raw) - len(rows)})")
+    print("[LOAD] writing to Postgres...")
+    summary = load(rows)
+    print(
+        f"[OK] inserted={summary['inserted']}  skipped={summary['skipped']}  "
+        f"(re-run will skip everything)"
+    )
+    print(f"[TOTALS] {summary['totals']}")
     return 0
 
 
