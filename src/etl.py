@@ -8,9 +8,11 @@ Re-running is safe: ON CONFLICT DO NOTHING ensures no duplicates.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from Bio import Entrez
 from dotenv import load_dotenv
@@ -55,6 +57,70 @@ def efetch_records(pmids: list[str], batch: int = 50) -> list[dict]:
     return records
 
 
+# -------------------------------------------------------------- transform --
+def _parse_year(pubdate: dict) -> int | None:
+    if pubdate.get("Year"):
+        try:
+            return int(str(pubdate["Year"]))
+        except ValueError:
+            pass
+    medline = str(pubdate.get("MedlineDate", ""))
+    m = re.search(r"\d{4}", medline)
+    return int(m.group()) if m else None
+
+
+def _join_abstract(abstract_node: Any) -> str | None:
+    parts = abstract_node.get("AbstractText", []) if abstract_node else []
+    if not parts:
+        return None
+    cleaned: list[str] = []
+    for p in parts:
+        label = p.attributes.get("Label") if hasattr(p, "attributes") else None
+        text_part = str(p).strip()
+        if not text_part:
+            continue
+        cleaned.append(f"{label}: {text_part}" if label else text_part)
+    return " ".join(cleaned) or None
+
+
+def _author_name(au: dict) -> str | None:
+    last = str(au.get("LastName", "")).strip()
+    fore = str(au.get("ForeName", "")).strip()
+    if last and fore:
+        return f"{last}, {fore}"
+    if last:
+        return last
+    coll = au.get("CollectiveName")
+    return str(coll).strip() if coll else None
+
+
+def transform(raw: dict) -> dict | None:
+    try:
+        mc = raw["MedlineCitation"]
+        a = mc["Article"]
+        pmid = int(str(mc["PMID"]))
+        title = str(a.get("ArticleTitle", "")).strip()
+        if not title:
+            return None
+        abstract = _join_abstract(a.get("Abstract"))
+        journal = str(a["Journal"]["Title"]).strip() or None
+        year = _parse_year(a["Journal"]["JournalIssue"]["PubDate"])
+        authors = [n for au in a.get("AuthorList", []) if (n := _author_name(au))]
+        mesh = [str(m["DescriptorName"]).strip() for m in mc.get("MeshHeadingList", [])]
+        return {
+            "pmid": pmid,
+            "title": title,
+            "abstract": abstract,
+            "year": year,
+            "journal": journal,
+            "authors": authors,
+            "mesh_terms": mesh,
+        }
+    except (KeyError, ValueError) as e:
+        print(f"[WARN] skipping malformed record: {e}")
+        return None
+
+
 # ------------------------------------------------------------------ main --
 def main() -> int:
     print(f"[CONFIG] topic={TOPIC!r}  max={MAX_ARTICLES}")
@@ -63,7 +129,9 @@ def main() -> int:
         print("[ERROR] no PMIDs returned — adjust the topic")
         return 1
     raw = efetch_records(pmids)
-    print(f"[EXTRACT] fetched {len(raw)} raw records")
+    print(f"[TRANSFORM] cleaning {len(raw)} records")
+    rows = [r for r in (transform(x) for x in raw) if r]
+    print(f"[TRANSFORM] kept {len(rows)} valid rows  (dropped {len(raw) - len(rows)})")
     return 0
 
 
