@@ -48,12 +48,6 @@ A: SELECT a.pmid, a.title, a.year FROM articles a JOIN journals j ON a.journal_i
 
 Q: Top 5 journals by article count
 A: SELECT j.name, COUNT(*) AS n FROM articles a JOIN journals j ON a.journal_id = j.id GROUP BY j.name ORDER BY n DESC LIMIT 5
-
-Q: Articles about checkpoint inhibitors published after 2020
-A: SELECT a.pmid, a.title, a.year FROM articles a WHERE (a.title ILIKE '%checkpoint%' OR a.abstract ILIKE '%checkpoint%') AND a.year > 2020 LIMIT 50
-
-Q: How many articles per year
-A: SELECT year, COUNT(*) AS n FROM articles GROUP BY year ORDER BY year
 """
 
 
