@@ -4,3 +4,7 @@ __pycache__/
 .env
 *.log
 .streamlit/secrets.toml
+
+# Local-only files (not part of the project)
+.claude/
+Full Stack Assignment.txt
