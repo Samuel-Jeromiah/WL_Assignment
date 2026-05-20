@@ -37,6 +37,15 @@ PostgreSQL
                     → execute under pubmed_readonly role
 ```
 
+## Technical Highlights & Design Decisions
+
+To ensure this application meets enterprise-grade standards, several advanced engineering patterns were implemented beyond the basic requirements:
+
+1. **Idempotent Data Pipelines:** The `src/etl.py` script utilizes strict PostgreSQL `ON CONFLICT DO NOTHING` constraints. This guarantees that the pipeline can be run repeatedly (e.g., via a daily cron job) without ever creating duplicate records or corrupting the database.
+2. **3rd Normal Form (3NF) Architecture:** Rather than storing flat, comma-separated strings for authors and medical keywords, the database employs Junction Tables (`article_authors` and `article_mesh`). This heavily normalized structure prevents data duplication and accelerates aggregation queries.
+3. **Advanced Trigram Indexing:** To ensure lightning-fast ILIKE text searches across tens of thousands of abstracts, the `pg_trgm` extension was enabled, and a GIN index was applied to the `articles` table.
+4. **SQL Translation over Vector Embeddings:** For the Q&A feature, an NL-to-SQL architecture was chosen over semantic Vector Search (RAG). Medical datasets require precise counting, filtering, and exact-match filtering (e.g., "How many articles were published in 2024?"), which LLM SQL translation handles deterministically, whereas vector embeddings struggle with exact math.
+
 ## File layout
 
 ```
