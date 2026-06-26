@@ -214,7 +214,7 @@ def main() -> int:
     print(f"[CONFIG] topic={TOPIC!r}  max={MAX_ARTICLES}")
     pmids = esearch_pmids(TOPIC, MAX_ARTICLES)
     if not pmids:
-        print("[ERROR] no PMIDs returned — adjust the topic")
+        print("[ERROR] no PMIDs returned - adjust the topic")
         return 1
     raw = efetch_records(pmids)
     print(f"[TRANSFORM] cleaning {len(raw)} records")

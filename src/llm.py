@@ -1,21 +1,25 @@
-"""NL -> SQL via Ollama. Designed for narrow, schema-aware translation.
+"""NL -> SQL via a hosted LLM (Groq). Designed for narrow, schema-aware translation.
 
 Keep scope tight: titles, years, journals, authors, MeSH terms. The prompt
 deliberately constrains the model to safer, simpler SELECT queries.
+
+Swapped from local Ollama to Groq so the app is cloud-deployable (Streamlit
+Cloud / HF Spaces) without a local model server. The nl_to_sql() contract is
+unchanged: it returns raw model text that still goes through the SQL guard.
 """
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-import ollama
 from dotenv import load_dotenv
+from groq import Groq
 
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:1.5b")
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+# Any current Groq chat model works; 70B gives the most reliable SQL.
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 
 SCHEMA_PROMPT = """You translate natural-language questions into a single read-only PostgreSQL SELECT query.
@@ -50,16 +54,31 @@ Q: Top 5 journals by article count
 A: SELECT j.name, COUNT(*) AS n FROM articles a JOIN journals j ON a.journal_id = j.id GROUP BY j.name ORDER BY n DESC LIMIT 5
 """
 
+_client: Groq | None = None
+
+
+def _get_client() -> Groq:
+    global _client
+    if _client is None:
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "GROQ_API_KEY is not set. Create a free key at "
+                "https://console.groq.com and add it to your .env "
+                "(or the deploy host's secrets)."
+            )
+        _client = Groq(api_key=api_key)
+    return _client
+
 
 def nl_to_sql(question: str) -> str:
-    """Call Ollama and return raw model output (still needs validation)."""
-    client = ollama.Client(host=OLLAMA_HOST)
-    resp = client.chat(
-        model=OLLAMA_MODEL,
+    """Call the LLM and return raw model output (still needs validation)."""
+    resp = _get_client().chat.completions.create(
+        model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": SCHEMA_PROMPT},
             {"role": "user", "content": question},
         ],
-        options={"temperature": 0.1},
+        temperature=0.1,
     )
-    return resp["message"]["content"]
+    return resp.choices[0].message.content or ""

@@ -1,4 +1,4 @@
-"""PubMed Explorer — Streamlit UI (Light Theme, Interview-Ready)."""
+"""PubMed Explorer - Streamlit UI (Light Theme, Interview-Ready)."""
 from __future__ import annotations
 
 import time
@@ -19,7 +19,7 @@ from sql_guard import SQLValidationError, extract_sql, validate_sql
 
 # ============================================================ PAGE CONFIG ==
 st.set_page_config(
-    page_title="PubMed Explorer",
+    page_title="MedQuery-AI",
     page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -255,8 +255,8 @@ ss.setdefault("qa_run", None)
 # ============================================================ HEADER ==
 head_left, head_right = st.columns([0.55, 0.45])
 with head_left:
-    st.markdown("# 🔬 PubMed Explorer")
-    st.caption("End-to-end pipeline: PubMed API → ETL → PostgreSQL → Streamlit + Local LLM")
+    st.markdown("# 🔬 MedQuery-AI")
+    st.caption("End-to-end pipeline: PubMed API -> ETL -> Neon Postgres -> Streamlit + Groq LLM")
 with head_right:
     s = get_stats()
     m1, m2, m3, m4 = st.columns(4)
@@ -270,14 +270,14 @@ st.markdown(
     """
     <div class="pipeline-banner">
         <span class="pipeline-step">📡 PubMed API</span>
-        <span class="pipeline-arrow">→</span>
+        <span class="pipeline-arrow">-></span>
         <span class="pipeline-step">⚙️ ETL (Python)</span>
-        <span class="pipeline-arrow">→</span>
-        <span class="pipeline-step">🗄️ PostgreSQL</span>
-        <span class="pipeline-arrow">→</span>
+        <span class="pipeline-arrow">-></span>
+        <span class="pipeline-step">🗄️ Neon Postgres</span>
+        <span class="pipeline-arrow">-></span>
         <span class="pipeline-step">🖥️ Streamlit UI</span>
-        <span class="pipeline-arrow">→</span>
-        <span class="pipeline-step">🤖 Ollama LLM</span>
+        <span class="pipeline-arrow">-></span>
+        <span class="pipeline-step">🤖 Groq LLM</span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -290,7 +290,7 @@ journals_all = cached_journals()
 
 with st.sidebar:
     st.markdown("### 🎛️ Search Filters")
-    kw = st.text_input("Keyword", placeholder="checkpoint, CAR-T …", help="Searches title and abstract")
+    kw = st.text_input("Keyword", placeholder="checkpoint, CAR-T ...", help="Searches title and abstract")
     yr_range = st.slider("Year range", yr_lo, yr_hi, (yr_lo, yr_hi))
     journals_pick = st.multiselect("Journals", options=journals_all, default=[])
     limit = st.slider("Max results", 10, 200, 50, 10)
@@ -302,20 +302,20 @@ with st.sidebar:
 
     with st.expander("🏗️ How It Works", expanded=False):
         st.markdown("""
-**1. Extract** — `etl.py` calls PubMed Esearch + Efetch to pull articles by topic.
+**1. Extract** - `etl.py` calls PubMed Esearch + Efetch to pull articles by topic.
 
-**2. Transform** — Cleans titles, abstracts, authors, MeSH terms. Handles malformed records.
+**2. Transform** - Cleans titles, abstracts, authors, MeSH terms. Handles malformed records.
 
-**3. Load** — Inserts into PostgreSQL (5 normalized tables). `ON CONFLICT` prevents duplicates.
+**3. Load** - Inserts into PostgreSQL (5 normalized tables). `ON CONFLICT` prevents duplicates.
 
-**4. Serve** — Streamlit reads from Postgres with parameterized queries.
+**4. Serve** - Streamlit reads from Postgres with parameterized queries.
 
-**5. Q&A** — Ollama (`qwen2.5-coder:0.5b`) translates natural language → SQL. Executes under a read-only DB role with 5s timeout.
+**5. Q&A** - Groq (`llama-3.3-70b`) translates natural language -> SQL. Executes on a read-only path with a 5s statement timeout.
         """)
 
     st.divider()
     st.markdown("##### Stack")
-    st.caption("PostgreSQL · Biopython · Streamlit · Ollama / `qwen2.5-coder:0.5b`")
+    st.caption("Neon Postgres · Biopython · Streamlit · Groq / Llama-3.3-70B")
 
 
 # ============================================================ TABS ==
@@ -357,7 +357,7 @@ with tab_search:
             "<div class='empty-state'>"
             "<div class='icon'>🔍</div>"
             "<div class='title'>No matching articles</div>"
-            "<div class='desc'>Try loosening the filters in the sidebar — broaden the year range or remove journal restrictions.</div>"
+            "<div class='desc'>Try loosening the filters in the sidebar - broaden the year range or remove journal restrictions.</div>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -373,9 +373,9 @@ with tab_search:
                     label_visibility="collapsed",
                 )
             with j2:
-                if st.button("Open in Detail →", type="primary", use_container_width=True):
+                if st.button("Open in Detail ->", type="primary", use_container_width=True):
                     ss.detail_pmid_str = str(int(pmid_choice))
-                    st.success(f"✅ PMID {pmid_choice} ready — switch to the **Detail** tab.")
+                    st.success(f"✅ PMID {pmid_choice} ready - switch to the **Detail** tab.")
 
         st.dataframe(
             df, use_container_width=True, hide_index=True, height=480,
@@ -408,7 +408,7 @@ with tab_detail:
             "<div class='empty-state'>"
             "<div class='icon'>📄</div>"
             "<div class='title'>No article selected</div>"
-            "<div class='desc'>Enter a PMID above, or go to the <b>Search</b> tab → pick an article → click <b>\"Open in Detail →\"</b></div>"
+            "<div class='desc'>Enter a PMID above, or go to the <b>Search</b> tab -> pick an article -> click <b>\"Open in Detail ->\"</b></div>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -420,8 +420,8 @@ with tab_detail:
             with st.container(border=True):
                 st.markdown(f"#### {article['title']}")
                 c1, c2, c3 = st.columns([0.22, 0.55, 0.23])
-                c1.metric("Year", article["year"] or "—")
-                c2.metric("Journal", (article["journal"] or "—"))
+                c1.metric("Year", article["year"] or "-")
+                c2.metric("Journal", (article["journal"] or "-"))
                 with c3:
                     st.write("")
                     st.link_button(
@@ -463,8 +463,8 @@ with tab_detail:
 with tab_qa:
     st.markdown("### Natural-Language Q&A")
     st.caption(
-        "A local LLM (`qwen2.5-coder:0.5b`) translates your question into SQL. "
-        "Queries execute under a **read-only** DB role with a **5-second timeout**."
+        "Groq (`llama-3.3-70b-versatile`) translates your question into SQL. "
+        "Queries execute on a **read-only** path with a **5-second timeout**."
     )
 
     st.markdown("<div class='eyebrow'>Try an example</div>", unsafe_allow_html=True)
@@ -492,11 +492,11 @@ with tab_qa:
                 key="qa_input", label_visibility="collapsed",
             )
         with bcol:
-            ask = st.button("Ask →", type="primary", use_container_width=True, disabled=not question.strip())
+            ask = st.button("Ask ->", type="primary", use_container_width=True, disabled=not question.strip())
 
     if ask:
         t_start = time.time()
-        with st.spinner("🤖 Translating your question to SQL… (may take 5–15s on first run)"):
+        with st.spinner("🤖 Translating your question to SQL... (may take 5-15s on first run)"):
             try:
                 raw = nl_to_sql(question)
             except Exception as e:
@@ -524,7 +524,7 @@ with tab_qa:
         st.divider()
 
         if run["phase"] == "guard":
-            st.error(f"🛡️  **Blocked by SQL safety guard** — {run['error']}")
+            st.error(f"🛡️  **Blocked by SQL safety guard** - {run['error']}")
             with st.expander("View blocked SQL"):
                 st.code(run["sql"] or "", language="sql")
             with st.expander("View raw LLM output"):
@@ -532,13 +532,13 @@ with tab_qa:
 
         elif run["phase"] == "llm":
             err_msg = run["error"]
-            if "memory" in err_msg.lower() or "ram" in err_msg.lower():
-                st.error("⚠️ Ollama needs more memory to load the model. **Try clicking Ask again** — it usually works on the second attempt.")
+            if "GROQ_API_KEY" in err_msg:
+                st.error("⚠️ No Groq API key configured. Add `GROQ_API_KEY` to the app's secrets - get a free key at console.groq.com.")
             else:
-                st.error(err_msg)
+                st.error(f"LLM request failed - {err_msg}")
 
         elif run["phase"] == "db":
-            st.error(f"Query failed — {run['error']}")
+            st.error(f"Query failed - {run['error']}")
             with st.expander("View generated SQL", expanded=True):
                 st.code(run["sql"] or "", language="sql")
 
@@ -550,9 +550,9 @@ with tab_qa:
             st.markdown(
                 f"<div class='trace-bar'>"
                 f"<span class='trace-dot'></span> <b>Question</b> received"
-                f"&nbsp;&nbsp;→&nbsp;&nbsp;"
+                f"&nbsp;&nbsp;->&nbsp;&nbsp;"
                 f"<span class='trace-dot'></span> <b>SQL generated</b> by LLM"
-                f"&nbsp;&nbsp;→&nbsp;&nbsp;"
+                f"&nbsp;&nbsp;->&nbsp;&nbsp;"
                 f"<span class='trace-dot'></span> <b>{len(dfq)} rows</b> returned in <b>{elapsed}s</b>"
                 f"</div>",
                 unsafe_allow_html=True,
